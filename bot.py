@@ -14,7 +14,7 @@ from telegram.ext import (
 # ══════════════════════════════════════════════
 #  НАСТРОЙКИ — замени на свои!
 # ══════════════════════════════════════════════
-BOT_TOKEN = "8635694534:AAH8qnR3CSckrX4w6y264E_bOB3fGAD0Zb0"
+BOT_TOKEN = "8635694534:AAHxYWfNaUCpUUkcF9v60plWlD5b0Ol0HDc"
 GAME_URL   = "https://profound-mousse-176ccc.netlify.app"  # ссылка на игру
 # ══════════════════════════════════════════════
 
