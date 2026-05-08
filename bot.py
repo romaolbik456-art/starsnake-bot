@@ -13,7 +13,7 @@ from telegram.ext import (
 
 # ══════════════════════════════════════════════
 BOT_TOKEN = "8635694534:AAHxYWfNaUCpUUkcF9v60plWlD5b0Ol0HDc"
-GAME_URL  = "https://deluxe-licorice-e13fd8.netlify.app"
+GAME_URL  = "https://prismatic-salmiakki-2a9c2f.netlify.app"
 # ══════════════════════════════════════════════
 
 logging.basicConfig(level=logging.INFO)
