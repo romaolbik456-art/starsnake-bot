@@ -75,7 +75,7 @@ def main_kb():
         [InlineKeyboardButton("🐍 Играть в змейку", callback_data="play")],
         [InlineKeyboardButton("❤️ Купить жизни",    callback_data="shop")],
         [InlineKeyboardButton("💎 Вывести звёзды",  callback_data="withdraw_menu")],
-        [InlineKeyboardButton("👥 Пригласить друга", callback_data="referral")],
+        [InlineKeyboardButton("⭐ Получить доп. звёзды", callback_data="referral")],
         [InlineKeyboardButton("👤 Личный кабинет",  callback_data="profile")],
     ])
 
@@ -100,8 +100,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Обработка реферальной ссылки
     if args and args[0].startswith("ref_") and is_new:
-        ref_id = args[0][4:]  # убираем "ref_"
-        if ref_id != str(user.id):  # нельзя пригласить самого себя
+        ref_id = args[0][4:]
+        if ref_id != str(user.id):
             # Создаём нового игрока
             get_player(user.id)
             update_player(user.id, {"referred_by": ref_id})
@@ -112,12 +112,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_refs  = ref_player["referrals"] + 1
             update_player(int(ref_id), {"stars": new_stars, "referrals": new_refs})
 
-            # Уведомляем пригласившего
+            # Уведомляем пригласившего с юзернеймом друга
+            friend_name = f"@{user.username}" if user.username else user.first_name
             try:
                 await context.bot.send_message(
                     chat_id=int(ref_id),
                     text=(
-                        f"🎉 <b>Твой друг {user.first_name} присоединился!</b>\n\n"
+                        f"🎉 <b>Твой друг {friend_name} запустил бота!</b>\n\n"
                         f"⭐ Тебе начислено <b>+{REF_BONUS} ⭐</b>\n"
                         f"💰 Твой баланс: <b>{new_stars:.3f} ⭐</b>"
                     ),
@@ -126,9 +127,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except:
                 pass
 
-            # Приветствие новому игроку
-            text = main_text(user)
-            kb   = main_kb()
+            kb = main_kb()
             if update.message:
                 await update.message.reply_text(
                     f"👋 Привет, <b>{user.first_name}</b>!\n\n"
@@ -301,13 +300,15 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🔙 Назад", callback_data="back_main")],
     ])
     await query.edit_message_text(
-        f"👥 <b>Пригласи друга — получи +{REF_BONUS} ⭐</b>\n\n"
+        f"⭐ <b>Получить дополнительные звёзды</b>\n\n"
+        f"Пригласи друга по своей ссылке и получи <b>+{REF_BONUS} ⭐</b>!\n\n"
         f"Твоя реферальная ссылка:\n"
         f"<code>{link}</code>\n\n"
         f"📊 Приглашено друзей: <b>{refs}</b>\n"
         f"⭐ Заработано на рефералах: <b>{refs * REF_BONUS:.1f} ⭐</b>\n"
         f"💰 Твой баланс: <b>{stars:.3f} ⭐</b>\n\n"
-        "Поделись ссылкой — когда друг зайдёт в бота, тебе сразу придёт <b>+2 ⭐</b>!",
+        f"⚠️ <i>Если твой друг уже играл в этого бота — ничего не сработает. "
+        f"Бонус начисляется только за новых игроков!</i>",
         reply_markup=kb, parse_mode="HTML"
     )
 
