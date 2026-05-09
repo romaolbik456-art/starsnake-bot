@@ -16,6 +16,7 @@ BOT_TOKEN  = "8635694534:AAHxYWfNaUCpUUkcF9v60plWlD5b0Ol0HDc"
 GAME_URL   = "https://transcendent-cucurucho-e6d9e9.netlify.app"
 BOT_USERNAME = "Zmeyka_Play_Bot"   # ← замени на username своего бота (без @)
 REF_BONUS  = 2.0                   # +2 звезды за каждого приглашённого
+ADMIN_ID   = 8562699254            # твой Telegram ID для уведомлений
 # ══════════════════════════════════════════════
 
 logging.basicConfig(level=logging.INFO)
@@ -75,7 +76,7 @@ def main_kb():
         [InlineKeyboardButton("🐍 Играть в змейку", callback_data="play")],
         [InlineKeyboardButton("❤️ Купить жизни",    callback_data="shop")],
         [InlineKeyboardButton("💎 Вывести звёзды",  callback_data="withdraw_menu")],
-        [InlineKeyboardButton("⭐ Получить доп. звёзды", callback_data="referral")],
+        [InlineKeyboardButton("👥 Пригласить друга",    callback_data="referral")],
         [InlineKeyboardButton("👤 Личный кабинет",  callback_data="profile")],
     ])
 
@@ -277,11 +278,31 @@ async def withdraw_amount_callback(update: Update, context: ContextTypes.DEFAULT
         return
     await query.answer()
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 В меню", callback_data="back_main")]])
+    
+    # Уведомление админу
+    username = f"@{query.from_user.username}" if query.from_user.username else query.from_user.first_name
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=(
+                f"💎 <b>Новая заявка на вывод!</b>\n\n"
+                f"👤 Игрок: <b>{username}</b>\n"
+                f"🆔 ID: <code>{query.from_user.id}</code>\n"
+                f"💰 Баланс: <b>{stars:.3f} ⭐</b>\n"
+                f"💎 Хочет вывести: <b>{amount} ⭐</b>\n\n"
+                f"Отправь игроку Stars вручную!"
+            ),
+            parse_mode="HTML"
+        )
+    except:
+        pass
+
     await query.edit_message_text(
         f"✅ <b>Заявка принята!</b>\n\n"
         f"💎 Сумма: <b>{amount} ⭐</b>\n"
         f"📊 Баланс: <b>{stars:.3f} ⭐</b>\n\n"
-        "Заявка отправлена на обработку!",
+        "Заявка отправлена на обработку!\n"
+        "Ожидай — администратор отправит тебе Stars в ближайшее время 😊",
         reply_markup=kb, parse_mode="HTML"
     )
 
