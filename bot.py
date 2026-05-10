@@ -13,7 +13,7 @@ from telegram.ext import (
 
 # ══════════════════════════════════════════════
 BOT_TOKEN  = "8635694534:AAHxYWfNaUCpUUkcF9v60plWlD5b0Ol0HDc"
-GAME_URL   = "https://transcendent-cucurucho-e6d9e9.netlify.app"
+GAME_URL   = "https://effervescent-horse-f7a792.netlify.app"
 BOT_USERNAME = "Zmeyka_Play_Bot"   # ← замени на username своего бота (без @)
 REF_BONUS  = 2.0                   # +2 звезды за каждого приглашённого
 ADMIN_ID   = 8562699254            # твой Telegram ID для уведомлений
@@ -381,6 +381,19 @@ async def profile_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ─── Обновление счёта из игры ─────────────────
+async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        data = json.loads(update.message.web_app_data.data)
+        if data.get("action") == "update_stars":
+            user_id = update.effective_user.id
+            stars = float(data.get("stars", 0))
+            lives = int(data.get("lives", 0))
+            update_player(user_id, {"stars": round(stars, 3), "lives": lives})
+    except:
+        pass
+
+
 # ─── Pre-checkout ─────────────────────────────
 async def pre_checkout(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
@@ -429,6 +442,7 @@ def main():
     app.add_handler(CallbackQueryHandler(back_main,                pattern="^back_main$"))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
     print("✅ Бот запущен!")
     app.run_polling()
 
