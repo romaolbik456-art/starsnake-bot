@@ -99,10 +99,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     is_new = not player_exists(user.id)
 
+    # Уведомление админу что кто-то запустил бота
+    username = f"@{user.username}" if user.username else user.first_name
+    if is_new:
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"👤 <b>Новый игрок запустил бота!</b>\n\n"
+                    f"Имя: <b>{user.first_name}</b>\n"
+                    f"Юзернейм: <b>{username}</b>\n"
+                    f"🆔 ID: <code>{user.id}</code>"
+                ),
+                parse_mode="HTML"
+            )
+        except:
+            pass
+
     # Обработка реферальной ссылки
     if args and args[0].startswith("ref_") and is_new:
         ref_id = args[0][4:]
-        if ref_id != str(user.id):
+        if ref_id.isdigit() and ref_id != str(user.id):
             # Создаём нового игрока
             get_player(user.id)
             update_player(user.id, {"referred_by": ref_id})
@@ -113,13 +130,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             new_refs  = ref_player["referrals"] + 1
             update_player(int(ref_id), {"stars": new_stars, "referrals": new_refs})
 
-            # Уведомляем пригласившего с юзернеймом друга
-            friend_name = f"@{user.username}" if user.username else user.first_name
+            # Уведомляем пригласившего
             try:
                 await context.bot.send_message(
                     chat_id=int(ref_id),
                     text=(
-                        f"🎉 <b>Твой друг {friend_name} запустил бота!</b>\n\n"
+                        f"🎉 <b>Твой друг {username} запустил бота!</b>\n\n"
                         f"⭐ Тебе начислено <b>+{REF_BONUS} ⭐</b>\n"
                         f"💰 Твой баланс: <b>{new_stars:.3f} ⭐</b>"
                     ),
