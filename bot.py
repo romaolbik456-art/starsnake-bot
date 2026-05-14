@@ -13,10 +13,8 @@ from telegram.ext import (
 
 # ══════════════════════════════════════════════
 BOT_TOKEN  = "8635694534:AAHxYWfNaUCpUUkcF9v60plWlD5b0Ol0HDc"
-GAME_URL   = "https://effervescent-horse-f7a792.netlify.app"
-BOT_USERNAME = "Zmeyka_Play_Bot"   # ← замени на username своего бота (без @)
-REF_BONUS  = 2.0                   # +2 звезды за каждого приглашённого
-ADMIN_ID   = 8562699254            # твой Telegram ID для уведомлений
+GAME_URL   = "https://eloquent-madeleine-948c0b.netlify.app"
+ADMIN_ID   = 8562699254
 # ══════════════════════════════════════════════
 
 logging.basicConfig(level=logging.INFO)
@@ -39,14 +37,7 @@ def get_player(user_id):
     db = load_db()
     uid = str(user_id)
     if uid not in db:
-        db[uid] = {
-            "stars": 0.0,
-            "lives": 0,
-            "games_played": 0,
-            "stars_withdrawn": 0.0,
-            "referrals": 0,
-            "referred_by": None
-        }
+        db[uid] = {"stars": 0.0, "lives": 0, "games_played": 0, "stars_withdrawn": 0.0}
         save_db(db)
     return db[uid]
 
@@ -54,14 +45,7 @@ def update_player(user_id, data):
     db = load_db()
     uid = str(user_id)
     if uid not in db:
-        db[uid] = {
-            "stars": 0.0,
-            "lives": 0,
-            "games_played": 0,
-            "stars_withdrawn": 0.0,
-            "referrals": 0,
-            "referred_by": None
-        }
+        db[uid] = {"stars": 0.0, "lives": 0, "games_played": 0, "stars_withdrawn": 0.0}
     db[uid].update(data)
     save_db(db)
 
@@ -70,14 +54,13 @@ def player_exists(user_id):
     return str(user_id) in db
 
 
-# ─── Клавиатура главного меню ─────────────────
+# ─── Меню ─────────────────────────────────────
 def main_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🐍 Играть в змейку", callback_data="play")],
-        [InlineKeyboardButton("❤️ Купить жизни",    callback_data="shop")],
-        [InlineKeyboardButton("💎 Вывести звёзды",  callback_data="withdraw_menu")],
-        [InlineKeyboardButton("👥 Пригласить друга",    callback_data="referral")],
-        [InlineKeyboardButton("👤 Личный кабинет",  callback_data="profile")],
+        [InlineKeyboardButton("🐍 Играть в змейку",  callback_data="play")],
+        [InlineKeyboardButton("❤️ Купить жизни",     callback_data="shop")],
+        [InlineKeyboardButton("💎 Вывести звёзды",   callback_data="withdraw_menu")],
+        [InlineKeyboardButton("👤 Личный кабинет",   callback_data="profile")],
     ])
 
 def main_text(user):
@@ -86,7 +69,6 @@ def main_text(user):
         "🐍 <b>Star Snake</b> — собирай звёзды и выводи их!\n\n"
         "⭐ За каждую звезду: <b>+0.025</b>\n"
         "💀 Смерть: <b>штраф −0.5 ⭐</b>\n"
-        "👥 За приглашённого друга: <b>+2 ⭐</b>\n"
         "🏆 Минимальный вывод: <b>15 ⭐</b>\n\n"
         "Выбери действие:"
     )
@@ -95,18 +77,17 @@ def main_text(user):
 # ─── /start ───────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    args = context.args
-
     is_new = not player_exists(user.id)
+    get_player(user.id)
 
-    # Уведомление админу что кто-то запустил бота
-    username = f"@{user.username}" if user.username else user.first_name
+    # Уведомление админу о новом игроке
     if is_new:
+        username = f"@{user.username}" if user.username else user.first_name
         try:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
                 text=(
-                    f"👤 <b>Новый игрок запустил бота!</b>\n\n"
+                    f"👤 <b>Новый игрок!</b>\n\n"
                     f"Имя: <b>{user.first_name}</b>\n"
                     f"Юзернейм: <b>{username}</b>\n"
                     f"🆔 ID: <code>{user.id}</code>"
@@ -116,49 +97,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
 
-    # Обработка реферальной ссылки
-    if args and args[0].startswith("ref_") and is_new:
-        ref_id = args[0][4:]
-        if ref_id.isdigit() and ref_id != str(user.id):
-            # Создаём нового игрока
-            get_player(user.id)
-            update_player(user.id, {"referred_by": ref_id})
-
-            # Начисляем бонус пригласившему
-            ref_player = get_player(int(ref_id))
-            new_stars = round(ref_player["stars"] + REF_BONUS, 3)
-            new_refs  = ref_player["referrals"] + 1
-            update_player(int(ref_id), {"stars": new_stars, "referrals": new_refs})
-
-            # Уведомляем пригласившего
-            try:
-                await context.bot.send_message(
-                    chat_id=int(ref_id),
-                    text=(
-                        f"🎉 <b>Твой друг {username} запустил бота!</b>\n\n"
-                        f"⭐ Тебе начислено <b>+{REF_BONUS} ⭐</b>\n"
-                        f"💰 Твой баланс: <b>{new_stars:.3f} ⭐</b>"
-                    ),
-                    parse_mode="HTML"
-                )
-            except:
-                pass
-
-            kb = main_kb()
-            if update.message:
-                await update.message.reply_text(
-                    f"👋 Привет, <b>{user.first_name}</b>!\n\n"
-                    f"🎉 Ты пришёл по реферальной ссылке!\n\n"
-                    f"🐍 Добро пожаловать в <b>Star Snake</b>!\n\n"
-                    "Выбери действие:",
-                    reply_markup=kb, parse_mode="HTML"
-                )
-            return
-
-    get_player(user.id)
     text = main_text(user)
     kb   = main_kb()
-
     if update.message:
         await update.message.reply_text(text, reply_markup=kb, parse_mode="HTML")
     else:
@@ -177,13 +117,11 @@ async def menu_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📖 <b>Как играть в Star Snake</b>\n\n"
-        "🐍 <b>Цель:</b> управляй змейкой и собирай ⭐ звёзды.\n\n"
-        "⭐ <b>Очки:</b> за каждую звезду +0.025\n\n"
-        "💀 <b>Смерть:</b> штраф <b>−0.5 ⭐</b>\n\n"
-        "❤️ <b>Жизни:</b> купи в боте — спасают от штрафа!\n\n"
-        "👥 <b>Рефералы:</b> пригласи друга → получи <b>+2 ⭐</b>\n\n"
-        "💎 <b>Вывод:</b> минимум <b>15 ⭐</b>\n\n"
-        "🕹 <b>Управление:</b> кнопки под полем\n\n"
+        "🐍 Управляй змейкой и собирай ⭐ звёзды\n\n"
+        "⭐ За каждую звезду: <b>+0.025</b>\n"
+        "💀 Смерть: штраф <b>−0.5 ⭐</b>\n"
+        "❤️ Жизни спасают от штрафа\n"
+        "💎 Минимум для вывода: <b>15 ⭐</b>\n\n"
         "📌 Команды:\n"
         "/start — главное меню\n"
         "/menu — открыть меню\n"
@@ -207,9 +145,8 @@ async def play_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         "🐍 <b>Star Snake</b>\n\n"
         "Нажми кнопку — игра откроется прямо в Telegram!\n\n"
-        "🕹 Управление: кнопки под полем\n"
-        f"❤️ Твоих жизней: <b>{lives}</b>\n"
-        f"⭐ Твой баланс: <b>{stars:.3f}</b>",
+        f"❤️ Жизней: <b>{lives}</b>\n"
+        f"⭐ Баланс: <b>{stars:.3f}</b>",
         reply_markup=kb, parse_mode="HTML"
     )
 
@@ -225,21 +162,17 @@ async def shop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     await query.edit_message_text(
         "❤️ <b>Магазин жизней</b>\n\n"
-        "Отлично! Купи жизни за звёзды Telegram, "
-        "чтобы ты смог побыстрее их вывести в большем количестве! ⬇️❤️\n\n"
-        "При смерти жизнь спасёт от штрафа и продолжит игру 🛡️",
+        "Купи жизни — при смерти жизнь спасёт от штрафа и продолжит игру! 🛡️",
         reply_markup=kb, parse_mode="HTML"
     )
 
-
-# ─── Купить жизни ─────────────────────────────
 async def buy_5_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
         title="5 ❤️ Жизней",
-        description="5 дополнительных жизней в Star Snake!",
+        description="5 жизней в Star Snake — спасают от штрафа!",
         payload="lives_5", currency="XTR",
         prices=[LabeledPrice("5 жизней", 10)],
         provider_token="",
@@ -251,14 +184,14 @@ async def buy_10_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
         title="10 ❤️ Жизней",
-        description="10 дополнительных жизней в Star Snake!",
+        description="10 жизней в Star Snake — спасают от штрафа!",
         payload="lives_10", currency="XTR",
         prices=[LabeledPrice("10 жизней", 25)],
         provider_token="",
     )
 
 
-# ─── Вывод звёзд ──────────────────────────────
+# ─── Вывод ────────────────────────────────────
 async def withdraw_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -279,13 +212,12 @@ async def withdraw_menu_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.edit_message_text(
         f"💎 <b>Вывод звёзд</b>\n\n"
         f"Твой баланс: <b>{stars:.3f} ⭐</b>\n"
-        f"Минимум для вывода: <b>15 ⭐</b>\n\n"
-        f"{status}\n\nВыбери сумму:",
+        f"Минимум: <b>15 ⭐</b>\n\n{status}\n\nВыбери сумму:",
         reply_markup=kb, parse_mode="HTML"
     )
 
 async def withdraw_amount_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
+    query  = update.callback_query
     amount = float(query.data.split("_")[1])
     player = get_player(query.from_user.id)
     stars  = player.get("stars", 0.0)
@@ -293,59 +225,27 @@ async def withdraw_amount_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer(f"❌ Недостаточно! У тебя {stars:.3f} ⭐", show_alert=True)
         return
     await query.answer()
-    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 В меню", callback_data="back_main")]])
-    
-    # Уведомление админу
     username = f"@{query.from_user.username}" if query.from_user.username else query.from_user.first_name
     try:
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=(
-                f"💎 <b>Новая заявка на вывод!</b>\n\n"
+                f"💎 <b>Заявка на вывод!</b>\n\n"
                 f"👤 Игрок: <b>{username}</b>\n"
                 f"🆔 ID: <code>{query.from_user.id}</code>\n"
                 f"💰 Баланс: <b>{stars:.3f} ⭐</b>\n"
-                f"💎 Хочет вывести: <b>{amount} ⭐</b>\n\n"
-                f"Отправь игроку Stars вручную!"
+                f"💎 Сумма: <b>{amount} ⭐</b>"
             ),
             parse_mode="HTML"
         )
     except:
         pass
-
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 В меню", callback_data="back_main")]])
     await query.edit_message_text(
         f"✅ <b>Заявка принята!</b>\n\n"
         f"💎 Сумма: <b>{amount} ⭐</b>\n"
         f"📊 Баланс: <b>{stars:.3f} ⭐</b>\n\n"
-        "Заявка отправлена на обработку!\n"
         "Ожидай — администратор отправит тебе Stars в ближайшее время 😊",
-        reply_markup=kb, parse_mode="HTML"
-    )
-
-
-# ─── Рефералы ─────────────────────────────────
-async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user   = query.from_user
-    player = get_player(user.id)
-    refs   = player.get("referrals", 0)
-    stars  = player.get("stars", 0.0)
-    link   = f"https://t.me/{BOT_USERNAME}?start=ref_{user.id}"
-    kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📤 Поделиться ссылкой", url=f"https://t.me/share/url?url={link}&text=Играй%20в%20Star%20Snake%20и%20зарабатывай%20звёзды!")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="back_main")],
-    ])
-    await query.edit_message_text(
-        f"⭐ <b>Получить дополнительные звёзды</b>\n\n"
-        f"Пригласи друга по своей ссылке и получи <b>+{REF_BONUS} ⭐</b>!\n\n"
-        f"Твоя реферальная ссылка:\n"
-        f"<code>{link}</code>\n\n"
-        f"📊 Приглашено друзей: <b>{refs}</b>\n"
-        f"⭐ Заработано на рефералах: <b>{refs * REF_BONUS:.1f} ⭐</b>\n"
-        f"💰 Твой баланс: <b>{stars:.3f} ⭐</b>\n\n"
-        f"⚠️ <i>Если твой друг уже играл в этого бота — ничего не сработает. "
-        f"Бонус начисляется только за новых игроков!</i>",
         reply_markup=kb, parse_mode="HTML"
     )
 
@@ -354,42 +254,39 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def profile_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query  = update.callback_query
     await query.answer()
-    user   = query.from_user
-    player = get_player(user.id)
+    player = get_player(query.from_user.id)
     stars     = player.get("stars", 0.0)
     lives     = player.get("lives", 0)
     games     = player.get("games_played", 0)
     withdrawn = player.get("stars_withdrawn", 0.0)
-    refs      = player.get("referrals", 0)
     MIN       = 15.0
     needed    = max(0.0, MIN - stars)
-    status    = "✅ Можно выводить!" if stars >= MIN else f"⏳ До вывода не хватает <b>{needed:.3f} ⭐</b>"
-
+    status    = "✅ Можно выводить!" if stars >= MIN else f"⏳ Не хватает <b>{needed:.3f} ⭐</b>"
     kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_main")]])
     await query.edit_message_text(
-        f"👤 <b>Личный кабинет</b>\n"
-        f"{'─'*26}\n\n"
+        f"👤 <b>Личный кабинет</b>\n{'─'*26}\n\n"
         f"🎮 Игр сыграно: <b>{games}</b>\n"
         f"⭐ На счётчике: <b>{stars:.3f} ⭐</b>\n"
         f"❤️ Жизней куплено: <b>{lives}</b>\n"
-        f"👥 Приглашено друзей: <b>{refs}</b>\n"
-        f"💸 Выведено всего: <b>{withdrawn:.3f} ⭐</b>\n\n"
-        f"{'─'*26}\n"
-        f"{status}\n\n"
+        f"💸 Выведено: <b>{withdrawn:.3f} ⭐</b>\n\n"
+        f"{'─'*26}\n{status}\n\n"
         f"📌 Минимум вывода: <b>15 ⭐</b>",
         reply_markup=kb, parse_mode="HTML"
     )
 
 
-# ─── Обновление счёта из игры ─────────────────
-async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ─── Синхронизация счёта из игры ──────────────
+async def sync_score(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        data = json.loads(update.message.web_app_data.data)
-        if data.get("action") == "update_stars":
-            user_id = update.effective_user.id
-            stars = float(data.get("stars", 0))
-            lives = int(data.get("lives", 0))
-            update_player(user_id, {"stars": round(stars, 3), "lives": lives})
+        text = update.message.text
+        if text and text.startswith('__sync__'):
+            parts = text.split('__')
+            stars = float(parts[2])
+            lives = int(parts[3])
+            update_player(update.effective_user.id, {
+                "stars": round(stars, 3),
+                "lives": lives
+            })
     except:
         pass
 
@@ -408,14 +305,14 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         new_lives = player["lives"] + 5
         update_player(user_id, {"lives": new_lives})
         await update.message.reply_text(
-            f"✅ <b>Оплата прошла!</b>\n\n❤️ +5 жизней!\nТеперь у тебя: <b>{new_lives} ❤️</b>\n\n🐍 Заходи в игру!",
+            f"✅ <b>Оплата прошла!</b>\n\n❤️ +5 жизней!\nТеперь: <b>{new_lives} ❤️</b>",
             parse_mode="HTML"
         )
     elif payload == "lives_10":
         new_lives = player["lives"] + 10
         update_player(user_id, {"lives": new_lives})
         await update.message.reply_text(
-            f"✅ <b>Оплата прошла!</b>\n\n❤️ +10 жизней!\nТеперь у тебя: <b>{new_lives} ❤️</b>\n\n🐍 Заходи в игру!",
+            f"✅ <b>Оплата прошла!</b>\n\n❤️ +10 жизней!\nТеперь: <b>{new_lives} ❤️</b>",
             parse_mode="HTML"
         )
 
@@ -437,12 +334,11 @@ def main():
     app.add_handler(CallbackQueryHandler(buy_10_callback,          pattern="^buy_10$"))
     app.add_handler(CallbackQueryHandler(withdraw_menu_callback,   pattern="^withdraw_menu$"))
     app.add_handler(CallbackQueryHandler(withdraw_amount_callback, pattern="^withdraw_(15|25|50|100)$"))
-    app.add_handler(CallbackQueryHandler(referral_callback,        pattern="^referral$"))
     app.add_handler(CallbackQueryHandler(profile_callback,         pattern="^profile$"))
     app.add_handler(CallbackQueryHandler(back_main,                pattern="^back_main$"))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
-    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sync_score))
     print("✅ Бот запущен!")
     app.run_polling()
 
