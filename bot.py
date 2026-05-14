@@ -13,7 +13,7 @@ from telegram.ext import (
 
 # ══════════════════════════════════════════════
 BOT_TOKEN  = "8635694534:AAHxYWfNaUCpUUkcF9v60plWlD5b0Ol0HDc"
-GAME_URL   = "https://eloquent-madeleine-948c0b.netlify.app"
+GAME_URL   = "https://musical-sunflower-f1ad5f.netlify.app"
 ADMIN_ID   = 8562699254
 # ══════════════════════════════════════════════
 
@@ -276,19 +276,20 @@ async def profile_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ─── Синхронизация счёта из игры ──────────────
-async def sync_score(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def web_app_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        text = update.message.text
-        if text and text.startswith('__sync__'):
-            parts = text.split('__')
-            stars = float(parts[2])
-            lives = int(parts[3])
-            update_player(update.effective_user.id, {
+        data = json.loads(update.message.web_app_data.data)
+        if data.get("action") == "update_stars":
+            user_id = update.effective_user.id
+            stars = float(data.get("stars", 0))
+            lives_count = int(data.get("lives", 0))
+            update_player(user_id, {
                 "stars": round(stars, 3),
-                "lives": lives
+                "lives": lives_count
             })
-    except:
-        pass
+            logger.info(f"Score synced for {user_id}: {stars} stars, {lives_count} lives")
+    except Exception as e:
+        logger.error(f"web_app_data error: {e}")
 
 
 # ─── Pre-checkout ─────────────────────────────
@@ -338,7 +339,7 @@ def main():
     app.add_handler(CallbackQueryHandler(back_main,                pattern="^back_main$"))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, sync_score))
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, web_app_data))
     print("✅ Бот запущен!")
     app.run_polling()
 
