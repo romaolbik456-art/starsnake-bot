@@ -324,72 +324,136 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 # ─── Поиск свободных юзернеймов ──────────────
-VOWELS = 'aeiou'
-CONSONANTS = 'bcdfghjklmnpqrstvwxyz'
+
+# Слоги для генерации читаемых слов
+SYLLABLES = [
+    'ba','be','bi','bo','bu','bra','bre','bro','bru',
+    'ca','ce','co','cu','cra','cre','cro','cru',
+    'da','de','di','do','du','dra','dre','dro','dru',
+    'fa','fe','fi','fo','fu','fla','fle','flo','flu',
+    'ga','ge','gi','go','gu','gra','gre','gro','gru',
+    'ha','he','hi','ho','hu',
+    'ja','je','ji','jo','ju',
+    'ka','ke','ki','ko','ku','kra','kre','kro',
+    'la','le','li','lo','lu',
+    'ma','me','mi','mo','mu',
+    'na','ne','ni','no','nu',
+    'pa','pe','pi','po','pu','pra','pre','pro','pru',
+    'ra','re','ri','ro','ru',
+    'sa','se','si','so','su','sha','she','sho','shu','ska','ske','ski','sko',
+    'sta','ste','sti','sto','stu','stra','stre','stro',
+    'ta','te','ti','to','tu','tra','tre','tro','tru',
+    'va','ve','vi','vo','vu',
+    'wa','we','wi','wo',
+    'xa','xe','xi','xo',
+    'ya','ye','yi','yo','yu',
+    'za','ze','zi','zo','zu',
+    'an','en','in','on','un',
+    'al','el','il','ol','ul',
+    'ar','er','ir','or','ur',
+]
 
 def gen_username():
-    """Генерирует красивый юзернейм из 5 букв"""
-    patterns = [
-        # CVCVC - самый читаемый паттерн
-        lambda: (random.choice(CONSONANTS) + random.choice(VOWELS) +
-                 random.choice(CONSONANTS) + random.choice(VOWELS) +
-                 random.choice(CONSONANTS)),
-        # CVCCV
-        lambda: (random.choice(CONSONANTS) + random.choice(VOWELS) +
-                 random.choice(CONSONANTS) + random.choice(CONSONANTS) +
-                 random.choice(VOWELS)),
-        # VCCVC
-        lambda: (random.choice(VOWELS) + random.choice(CONSONANTS) +
-                 random.choice(CONSONANTS) + random.choice(VOWELS) +
-                 random.choice(CONSONANTS)),
-    ]
-    return random.choice(patterns)()
+    """Генерирует слово похожее на настоящее — 5, 6 или 7 букв"""
+    while True:
+        # Собираем из 1-3 слогов
+        num_syllables = random.randint(1, 3)
+        word = ''.join(random.choice(SYLLABLES) for _ in range(num_syllables))
+
+        # Обрезаем до нужной длины
+        length = random.choice([5, 6, 7])
+        if len(word) < length:
+            # Добираем буквы
+            extras = 'aeioursntlm'
+            word += ''.join(random.choice(extras) for _ in range(length - len(word)))
+        word = word[:length]
+
+        # Только буквы, минимум 5
+        if len(word) >= 5 and word.isalpha():
+            return word.lower()
 
 async def check_username_free(username: str, bot) -> bool:
-    """Двойная проверка: Telegram API + Fragment"""
+    """Тройная проверка: Telegram API + Fragment + t.me"""
+
     # Проверка 1 — Telegram API
     try:
         await bot.get_chat(f"@{username}")
-        return False  # Занят в Telegram
+        return False  # Нашли — занят
     except Exception as e:
         err = str(e).lower()
-        if "chat not found" not in err and "username not found" not in err and "invalid" not in err:
-            return False  # Другая ошибка — пропускаем
+        # Если не "не найден" — неизвестная ошибка, считаем занятым
+        if ("chat not found" not in err and
+            "username not found" not in err and
+            "invalid username" not in err and
+            "peer_id_invalid" not in err and
+            "deactivated" not in err):
+            return False
 
     # Проверка 2 — Fragment.com
     try:
         url = f"https://fragment.com/username/{username}"
-        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
                 text = await resp.text()
-                # Если на Fragment есть листинг — занят или продаётся
-                if "Unavailable" in text or "unavailable" in text:
+                if any(x in text for x in [
+                    "Unavailable", "unavailable", "ton_price",
+                    "Buy for", "Place a bid", "sold", "auction",
+                    "tgme_page", "Send Message"
+                ]):
                     return False
-                if "ton_price" in text or "Buy for" in text or "Place a bid" in text:
-                    return False  # Продаётся на Fragment
-                if "Available" in text:
-                    return True  # Свободен!
     except:
-        pass
+        return False  # Не смогли проверить — считаем занятым на всякий случай
 
-    return True  # Не найден нигде — свободен!
+    # Проверка 3 — t.me
+    try:
+        url = f"https://t.me/{username}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers,
+                                   allow_redirects=True,
+                                   timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                text = await resp.text()
+                if any(x in text for x in [
+                    "tgme_page_title", "tgme_page_description",
+                    "Send Message", "View in Telegram", "og:title"
+                ]):
+                    return False
+    except:
+        return False
+
+    return True  # Прошёл все 3 проверки — точно свободен!
 
 async def find_free_usernames(count: int = 5, bot=None) -> list:
-    """Ищет count свободных юзернеймов"""
+    """Ищет юзернеймы параллельно"""
     found = []
     tried = set()
-    attempts = 0
-    while len(found) < count and attempts < 100:
-        attempts += 1
-        username = gen_username()
-        if username in tried:
-            continue
-        tried.add(username)
-        if await check_username_free(username, bot):
-            found.append(username)
-        await asyncio.sleep(0.5)
-    return found
+    max_rounds = 20
+
+    for _ in range(max_rounds):
+        if len(found) >= count:
+            break
+        # Проверяем 4 юзернейма одновременно
+        batch = []
+        for _ in range(4):
+            u = gen_username()
+            while u in tried:
+                u = gen_username()
+            tried.add(u)
+            batch.append(u)
+
+        results = await asyncio.gather(*[check_username_free(u, bot) for u in batch])
+        for u, free in zip(batch, results):
+            if free and u not in found:
+                found.append(u)
+            if len(found) >= count:
+                break
+        await asyncio.sleep(0.3)
+
+    return found[:count]
 
 
 # ─── Callback: найти юзернейм ─────────────────
