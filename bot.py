@@ -1,6 +1,10 @@
 import logging
 import json
 import os
+import random
+import string
+import asyncio
+import aiohttp
 from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup,
     LabeledPrice, WebAppInfo
@@ -57,10 +61,11 @@ def player_exists(user_id):
 # ─── Меню ─────────────────────────────────────
 def main_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🐍 Играть в змейку",  callback_data="play")],
-        [InlineKeyboardButton("❤️ Купить жизни",     callback_data="shop")],
-        [InlineKeyboardButton("💎 Вывести звёзды",   callback_data="withdraw_menu")],
-        [InlineKeyboardButton("👤 Личный кабинет",   callback_data="profile")],
+        [InlineKeyboardButton("🐍 Играть в змейку",    callback_data="play")],
+        [InlineKeyboardButton("❤️ Купить жизни",       callback_data="shop")],
+        [InlineKeyboardButton("💎 Вывести звёзды",     callback_data="withdraw_menu")],
+        [InlineKeyboardButton("🔤 Найти свободный юз", callback_data="find_username")],
+        [InlineKeyboardButton("👤 Личный кабинет",     callback_data="profile")],
     ])
 
 def main_text(user):
@@ -318,6 +323,90 @@ async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
 
+# ─── Поиск свободных юзернеймов ──────────────
+VOWELS = 'aeiou'
+CONSONANTS = 'bcdfghjklmnpqrstvwxyz'
+
+def gen_username():
+    """Генерирует красивый юзернейм из 5 букв"""
+    patterns = [
+        # CVCVC - самый читаемый паттерн
+        lambda: (random.choice(CONSONANTS) + random.choice(VOWELS) +
+                 random.choice(CONSONANTS) + random.choice(VOWELS) +
+                 random.choice(CONSONANTS)),
+        # CVCCV
+        lambda: (random.choice(CONSONANTS) + random.choice(VOWELS) +
+                 random.choice(CONSONANTS) + random.choice(CONSONANTS) +
+                 random.choice(VOWELS)),
+        # VCCVC
+        lambda: (random.choice(VOWELS) + random.choice(CONSONANTS) +
+                 random.choice(CONSONANTS) + random.choice(VOWELS) +
+                 random.choice(CONSONANTS)),
+    ]
+    return random.choice(patterns)()
+
+async def check_username_free(username: str) -> bool:
+    """Проверяет свободен ли юзернейм через t.me"""
+    try:
+        url = f"https://t.me/{username}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                text = await resp.text()
+                # Если страница содержит "tgme_page_title" - аккаунт занят
+                return "tgme_page" not in text
+    except:
+        return False
+
+async def find_free_usernames(count: int = 5) -> list:
+    """Ищет count свободных юзернеймов"""
+    found = []
+    tried = set()
+    attempts = 0
+    while len(found) < count and attempts < 60:
+        attempts += 1
+        username = gen_username()
+        if username in tried:
+            continue
+        tried.add(username)
+        if await check_username_free(username):
+            found.append(username)
+        await asyncio.sleep(0.3)
+    return found
+
+
+# ─── Callback: найти юзернейм ─────────────────
+async def find_username_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="back_main")]])
+    await query.edit_message_text(
+        "🔤 <b>Поиск свободных юзернеймов</b>\n\n"
+        "⏳ Ищем свободные юзернеймы из 5 букв...\n"
+        "Это займёт около 30 секунд, подожди!",
+        reply_markup=kb, parse_mode="HTML"
+    )
+    # Ищем юзернеймы
+    usernames = await find_free_usernames(5)
+    if usernames:
+        result = "\n".join([f"✅ <code>@{u}</code>  →  t.me/{u}" for u in usernames])
+        text = (
+            f"🔤 <b>Свободные юзернеймы найдены!</b>\n\n"
+            f"{result}\n\n"
+            f"💡 Нажми на юзернейм чтобы скопировать!\n"
+            f"⚡️ Регистрируй быстро — их могут занять!"
+        )
+    else:
+        text = (
+            "😔 <b>Не удалось найти свободные юзернеймы.</b>\n\n"
+            "Попробуй ещё раз!"
+        )
+    kb2 = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Искать ещё", callback_data="find_username")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="back_main")],
+    ])
+    await query.edit_message_text(text, reply_markup=kb2, parse_mode="HTML")
+
+
 # ─── Назад ────────────────────────────────────
 async def back_main(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await start(update, context)
@@ -336,6 +425,7 @@ def main():
     app.add_handler(CallbackQueryHandler(withdraw_menu_callback,   pattern="^withdraw_menu$"))
     app.add_handler(CallbackQueryHandler(withdraw_amount_callback, pattern="^withdraw_(15|25|50|100)$"))
     app.add_handler(CallbackQueryHandler(profile_callback,         pattern="^profile$"))
+    app.add_handler(CallbackQueryHandler(find_username_callback,   pattern="^find_username$"))
     app.add_handler(CallbackQueryHandler(back_main,                pattern="^back_main$"))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
