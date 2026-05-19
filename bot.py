@@ -346,15 +346,34 @@ def gen_username():
     return random.choice(patterns)()
 
 async def check_username_free(username: str, bot) -> bool:
-    """Проверяет свободен ли юзернейм через Telegram API"""
+    """Двойная проверка: Telegram API + Fragment"""
+    # Проверка 1 — Telegram API
     try:
         await bot.get_chat(f"@{username}")
-        return False  # Нашли — занят
+        return False  # Занят в Telegram
     except Exception as e:
         err = str(e).lower()
-        if "chat not found" in err or "invalid" in err or "username not found" in err:
-            return True  # Не найден — свободен
-        return False
+        if "chat not found" not in err and "username not found" not in err and "invalid" not in err:
+            return False  # Другая ошибка — пропускаем
+
+    # Проверка 2 — Fragment.com
+    try:
+        url = f"https://fragment.com/username/{username}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                text = await resp.text()
+                # Если на Fragment есть листинг — занят или продаётся
+                if "Unavailable" in text or "unavailable" in text:
+                    return False
+                if "ton_price" in text or "Buy for" in text or "Place a bid" in text:
+                    return False  # Продаётся на Fragment
+                if "Available" in text:
+                    return True  # Свободен!
+    except:
+        pass
+
+    return True  # Не найден нигде — свободен!
 
 async def find_free_usernames(count: int = 5, bot=None) -> list:
     """Ищет count свободных юзернеймов"""
