@@ -79,9 +79,9 @@ async def is_free(username: str, bot) -> bool:
                 timeout=aiohttp.ClientTimeout(total=7)
             ) as r:
                 text = await r.text()
-                bad = ["ton_price", "Buy for", "Place a bid",
-                       "Unavailable", "unavailable", "auction"]
-                if any(x in text for x in bad):
+                if any(x in text for x in ["is taken", "ton_price", "Buy for",
+                                            "Place a bid", "make an offer",
+                                            "Make an offer"]):
                     return False
     except:
         return False
