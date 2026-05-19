@@ -345,32 +345,31 @@ def gen_username():
     ]
     return random.choice(patterns)()
 
-async def check_username_free(username: str) -> bool:
-    """Проверяет свободен ли юзернейм через t.me"""
+async def check_username_free(username: str, bot) -> bool:
+    """Проверяет свободен ли юзернейм через Telegram API"""
     try:
-        url = f"https://t.me/{username}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-                text = await resp.text()
-                # Если страница содержит "tgme_page_title" - аккаунт занят
-                return "tgme_page" not in text
-    except:
+        await bot.get_chat(f"@{username}")
+        return False  # Нашли — занят
+    except Exception as e:
+        err = str(e).lower()
+        if "chat not found" in err or "invalid" in err or "username not found" in err:
+            return True  # Не найден — свободен
         return False
 
-async def find_free_usernames(count: int = 5) -> list:
+async def find_free_usernames(count: int = 5, bot=None) -> list:
     """Ищет count свободных юзернеймов"""
     found = []
     tried = set()
     attempts = 0
-    while len(found) < count and attempts < 60:
+    while len(found) < count and attempts < 100:
         attempts += 1
         username = gen_username()
         if username in tried:
             continue
         tried.add(username)
-        if await check_username_free(username):
+        if await check_username_free(username, bot):
             found.append(username)
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)
     return found
 
 
@@ -386,7 +385,7 @@ async def find_username_callback(update: Update, context: ContextTypes.DEFAULT_T
         reply_markup=kb, parse_mode="HTML"
     )
     # Ищем юзернеймы
-    usernames = await find_free_usernames(5)
+    usernames = await find_free_usernames(5, context.bot)
     if usernames:
         result = "\n".join([f"✅ <code>@{u}</code>  →  t.me/{u}" for u in usernames])
         text = (
