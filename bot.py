@@ -56,9 +56,9 @@ def gen_word(length: int) -> str:
     return word[:length].lower()
 
 async def is_free(username: str, bot) -> bool:
-    """Проверка через Fragment и Telegram API"""
+    """Проверка: юз должен отсутствовать и на Fragment и в Telegram"""
 
-    # 1. Fragment — основная проверка
+    # 1. Fragment — если есть ЛЮБОЕ упоминание аукциона/продажи — занят
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get(
@@ -67,23 +67,24 @@ async def is_free(username: str, bot) -> bool:
                 timeout=aiohttp.ClientTimeout(total=8)
             ) as r:
                 text = await r.text()
-                # Занят если есть эти фразы
+                # Если на Fragment есть страница с аукционом — юз НЕ свободен
                 if any(x in text for x in [
-                    "is taken", "Make an offer", "make an offer",
-                    "ton_price", "Buy for", "Place a bid"
+                    "tm-status-avail", "auction.js", "ajInit",
+                    "Place bid", "Make an offer", "is taken",
+                    "Buy @", "auctionLastLt", "Fragment Auctions"
                 ]):
                     return False
     except:
         return False
 
-    # 2. Telegram API — дополнительная проверка
+    # 2. Telegram API
     try:
         await bot.get_chat(f"@{username}")
         return False  # нашли — занят
     except Exception as e:
         err = str(e).lower()
-        # Свободен только если "not found"
-        if "chat not found" in err or "username not found" in err or "peer_id_invalid" in err or "invalid username" in err:
+        if any(x in err for x in ["chat not found", "username not found",
+                                    "peer_id_invalid", "invalid username"]):
             return True
         return False
 
