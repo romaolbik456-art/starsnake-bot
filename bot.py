@@ -56,37 +56,36 @@ def gen_word(length: int) -> str:
     return word[:length].lower()
 
 async def is_free(username: str, bot) -> bool:
-    """Проверка через Telegram API и Fragment"""
-    # 1. Telegram API
-    try:
-        await bot.get_chat(f"@{username}")
-        return False  # занят
-    except Exception as e:
-        err = str(e).lower()
-        occupied = ("chat not found" not in err and
-                    "username not found" not in err and
-                    "invalid username" not in err and
-                    "peer_id_invalid" not in err)
-        if occupied:
-            return False
+    """Проверка через Fragment и Telegram API"""
 
-    # 2. Fragment
+    # 1. Fragment — основная проверка
     try:
         async with aiohttp.ClientSession() as s:
             async with s.get(
                 f"https://fragment.com/username/{username}",
                 headers={"User-Agent": "Mozilla/5.0"},
-                timeout=aiohttp.ClientTimeout(total=7)
+                timeout=aiohttp.ClientTimeout(total=8)
             ) as r:
                 text = await r.text()
-                if any(x in text for x in ["is taken", "ton_price", "Buy for",
-                                            "Place a bid", "make an offer",
-                                            "Make an offer"]):
+                # Занят если есть эти фразы
+                if any(x in text for x in [
+                    "is taken", "Make an offer", "make an offer",
+                    "ton_price", "Buy for", "Place a bid"
+                ]):
                     return False
     except:
         return False
 
-    return True
+    # 2. Telegram API — дополнительная проверка
+    try:
+        await bot.get_chat(f"@{username}")
+        return False  # нашли — занят
+    except Exception as e:
+        err = str(e).lower()
+        # Свободен только если "not found"
+        if "chat not found" in err or "username not found" in err or "peer_id_invalid" in err or "invalid username" in err:
+            return True
+        return False
 
 async def find_usernames(length: int, bot, count: int = 3) -> list:
     """Ищет свободные юзернеймы нужной длины"""
